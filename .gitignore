@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+env/
+
+# Next.js
+.next/
+out/
+build/
+
+# Environment Variables (NEVER commit these)
+.env
+.env*.local
+
+# System
+.DS_Store

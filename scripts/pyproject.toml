@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "bibtexparser>=1.4.3",
     "black>=25.11.0",
     "google-generativeai>=0.8.5",
     "pypdf>=6.4.0",

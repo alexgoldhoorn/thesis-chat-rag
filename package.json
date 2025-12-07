@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@ai-sdk/google": "^0.0.55",
+    "@ai-sdk/google": "^2.0.44",
     "@ai-sdk/react": "^2.0.109",
     "@supabase/supabase-js": "^2.46.1",
     "@tailwindcss/typography": "^0.5.19",

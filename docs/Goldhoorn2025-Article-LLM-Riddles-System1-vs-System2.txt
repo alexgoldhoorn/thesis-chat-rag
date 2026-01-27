@@ -1,0 +1,247 @@
+System 1 vs System 2: Testing LLMs with Riddles
+
+December 2025 - ~8 minute read
+
+Large Language Models (LLMs) can pass professional exams and write production code—but how do they perform on riddles? I tested eight models (six cloud, two local) to find out how well they handle puzzles that require shifting from pattern matching to first-principles reasoning.
+
+What are System 1 and System 2? These terms come from psychologist Daniel Kahneman's research on human thinking (Thinking, Fast and Slow, 2011). System 1 is fast and intuitive (pattern matching), while System 2 is slow and deliberate (step-by-step reasoning). In LLMs, this translates to direct answer generation versus prompted reasoning chains like Chain-of-Thought (Wei et al., 2022).
+
+Models Tested
+
+For this experiment, I tested the following models in December 2025 (using paid versions for Claude and Gemini):
+
+Cloud Models:
+- Claude 4.5 Sonnet (Anthropic)
+- Gemini 3 Pro (Google)
+- ChatGPT-4o (OpenAI)
+- DeepSeek-V3
+- Grok 4.1 (xAI)
+- Perplexity Pro (Perplexity AI)
+
+Local Models (via Ollama):
+- Llama 3.1 8B (Meta)
+- Qwen 2.5 14B (Alibaba)
+
+Riddle Selection
+
+I selected riddles through exploratory testing—looking for cases where frontier models gave different answers, revealing how they handle wordplay, logical contradictions, and ambiguity. The goal was to find puzzles that expose different reasoning failure modes rather than simply measuring accuracy on a standardized benchmark.
+
+Methodology
+
+To ensure a fair comparison, I followed a consistent testing protocol:
+
+- Date tested: December 20-28, 2025.
+- Prompt format: Identical text for all models, submitted in fresh threads to avoid context leakage.
+- Model settings: Default web interface settings (temperature and other parameters were not manually adjusted).
+- Scoring: Only the first answer is counted. Follow-up prompts and corrections are noted separately but do not affect the scorecard.
+- Iterations: Single attempt per model per riddle. Follow-up prompts were tested separately to explore System 2 activation.
+
+Note: Results may vary across runs due to:
+- The probabilistic nature of LLMs (temperature settings affect randomness)
+- Memory features in some models (Claude, ChatGPT) that may recall past conversations
+- Model updates and fine-tuning over time
+
+Case 1: The Woman in the Boat
+
+The Riddle: "There's a woman in a boat on a lake wearing a coat. If you want to know her name, it's in the riddle I just wrote. What is the woman's name..."
+
+Note: The riddle was presented as an image with no question mark—the final line reads "What is the woman's name..." ending with three dots.
+
+Ground Truth
+
+"There". The riddle states "it's in the riddle I just wrote"—the opening "There's a woman" contains "There" as a complete word that can be parsed as a name ("There is a woman"). This interpretation requires only reading the text literally without external assumptions.
+
+Alternative interpretations require additional reasoning: "What is the woman's name..." ending with three dots could be a statement (name = "What"), but this assumes the punctuation is a deliberate clue. Acrostic readings like "Mary" or phonetic interpretations like "Theresa" introduce external pattern-matching not explicitly supported by the riddle's text.
+
+Model Responses
+
+- Perplexity: Correctly concluded "There"
+- Grok 4.1: Concluded "What" (valid alternative, reading "What is the woman's name" as a statement)
+- Claude 4.5 Sonnet: Identified the acrostic "Mary"
+- ChatGPT-4o, DeepSeek, Gemini 3 Pro: All guessed names based on phonetics or substrings
+- Qwen 2.5: Refused to answer, noting the riddle "doesn't explicitly provide a name" (showed caution but missed the wordplay)
+- Llama 3.1: Guessed "Who" without clear reasoning
+
+Case 2: The Impossible Math
+
+The Equation: (K + K) / K = 6
+
+Ground Truth
+
+No Solution. In standard algebra, (2K) / K = 2 (for K != 0), so 2 = 6 is a contradiction.
+
+Model Responses
+
+- Claude 4.5, ChatGPT-4o, Gemini 3 Pro, Grok 4.1, Perplexity, and Qwen 2.5: All correctly identified the contradiction and stated there is no solution.
+- DeepSeek: Attempted to solve it using a Base 5 Number System, arguing that if you interpret "+" as string concatenation (KK) in Base 5, then KK = 5K + K = 6K. Therefore, 6K/K = 6.
+- Llama 3.1: Made an algebra error at step 4, incorrectly transforming (2K)/K = 6 into 2/K = 6 instead of recognizing 2 = 6. This led to a wrong answer of K = 1/3.
+
+When Reasoning Goes Wrong: The DeepSeek Case
+
+DeepSeek's Base 5 solution is technically brilliant—and completely wrong. It demonstrates that:
+
+- LLMs can construct internally consistent logical frameworks to justify false premises.
+- More reasoning steps does not equal more accuracy (analogous to human rationalization).
+- For practitioners: Beware of convincing but wrong explanations—impressive-sounding logic that leads to false conclusions.
+
+Case 3: The Overlapping Family
+
+The Riddle: "I have three sisters. Each of my sisters has exactly one brother. How many siblings do we have in total?"
+
+Ground Truth
+
+4 siblings (3 sisters and 1 brother—the narrator).
+
+Model Responses
+
+- All models: Correctly identified the total as 4. This type of shared-relationship logic appears straightforward for modern LLMs, likely due to similar problems in their training data.
+
+Case 4: The Heavy Shadow
+
+The Riddle: "A 5kg iron ball and a 1kg wooden ball are dropped from the same height. At the exact moment they hit the ground, which one casts a longer shadow?"
+
+Ground Truth
+
+The Wooden Ball. While both balls hit the ground simultaneously (same acceleration regardless of mass, ignoring air resistance), shadow length depends on physical size. A 1kg wooden ball (typical wood density ~600 kg/m3) has a diameter of roughly 15 cm, while a 5kg iron ball (iron density ~7870 kg/m3) has a diameter of roughly 11 cm. The larger wooden ball blocks more light, casting a longer shadow.
+
+Diameter calculation:
+For a sphere: Volume = (4/3)pi*r^3, and Mass = Density x Volume
+Solving for radius: r = cube_root[(3 x Mass) / (4 x pi x Density)]
+
+Wooden ball (1 kg, density 600 kg/m3):
+- r^3 = (3 x 1) / (4 x pi x 600) = 0.000398 m3
+- r = 0.0736 m = 7.36 cm
+- diameter = 14.7 cm, approximately 15 cm
+
+Iron ball (5 kg, density 7870 kg/m3):
+- r^3 = (3 x 5) / (4 x pi x 7870) = 0.000153 m3
+- r = 0.0534 m = 5.34 cm
+- diameter = 10.7 cm, approximately 11 cm
+
+Model Responses
+
+- Gemini 3 Pro and DeepSeek: Both correctly reasoned through the density and volume requirements.
+- Claude 4.5 and ChatGPT-4o: Focused on the "moment of impact," arguing that at height 0, neither casts a significant shadow.
+- Perplexity, Grok 4.1, and Qwen 2.5: Incorrectly concluded the shadows are identical, citing Galileo's principle (objects fall at the same rate) but missing that shadow length depends on object size, not falling speed.
+- Llama 3.1: Incorrectly concluded the iron ball casts a longer shadow, claiming the heavier ball would "hit the ground first" due to having "more mass and thus more inertia"—contradicting Galileo's principle and confusing mass with size.
+
+Case 5: The Calendar Trap
+
+The Riddle: "If yesterday was the day before Monday, and tomorrow is the day after Thursday, what day is it today?"
+
+Ground Truth
+
+Logically Impossible. "Yesterday was Sunday" implies today is Monday. "Tomorrow is Friday" implies today is Thursday.
+
+Model Responses
+
+- Claude 4.5, ChatGPT-4o, Gemini 3 Pro, DeepSeek, and Grok 4.1: All identified the contradiction.
+- Perplexity: Hallucinated "Friday," likely retrieving a similar but mathematically solvable version of this riddle.
+- Llama 3.1: Answered "Saturday" without recognizing the logical contradiction.
+- Qwen 2.5: Answered "Thursday" without recognizing the logical contradiction.
+
+Case 6: The Silent Ingredient
+
+The Riddle: "I am made of water, but if you put me in water, I disappear. What am I?"
+
+Ground Truth
+
+Ice (most common answer) or Steam/Water vapor (also valid).
+
+This case illustrates the cognitive shift from System 1 (fast, intuitive pattern matching) to System 2 (slow, deliberate reasoning). Both ice and steam are made of water and "disappear" when placed in water—ice melts and becomes indistinguishable from the liquid water, while steam condenses and dissolves into the liquid. Both demonstrate understanding of phase transitions.
+
+Model Responses
+
+- Most models answered "Ice" on first attempt.
+- Claude 4.5: Initially answered "Salt" (counted as incorrect for scoring). However, when prompted with a follow-up nudge ("But it's made of water"), it self-corrected to "Ice." This demonstrates System 2 activation, but the initial answer counts for the scorecard.
+- Qwen 2.5: Answered "Steam" with correct reasoning about phase changes—equally valid.
+- Llama 3.1: Answered "Iceberg" (technically ice, but more specific than the standard answer).
+
+Case 7: Mary's Daughter
+
+The Riddle: "If Mary's daughter is my daughter's mother, who am I to Mary?"
+
+Ground Truth
+
+Exactly two valid interpretations:
+
+1. Mary is my mother
+   - If I am the mother of my daughter
+   - Then Mary's daughter = me
+   - Therefore Mary = my mother
+
+2. Mary is my partner's mother
+   - If my partner is the mother of my daughter
+   - Then Mary's daughter = my partner
+   - Therefore Mary = my partner's mother
+
+The riddle is intentionally ambiguous because "my daughter's mother" could refer to either the speaker or the speaker's partner. This ambiguity exists regardless of gender or parental arrangements.
+
+Model Responses
+
+- DeepSeek: Explicitly considered both cases and concluded "Mother" or "Mother-in-law" depending on interpretation.
+- Claude 4.5, ChatGPT-4o, Gemini 3 Pro, Grok, Perplexity, and Qwen 2.5: All assumed the speaker's partner is the mother, providing only "Mother-in-law" or "Son-in-law".
+- Llama 3.1: Answered "Grandmother" - misunderstood the question entirely, answering who Mary is to your daughter rather than who you are to Mary.
+
+Incomplete Reasoning
+
+Five out of six models provided a single valid answer without acknowledging the riddle's ambiguity. They converged on one interpretation (partner is the mother) rather than identifying both valid solutions. Only DeepSeek explicitly recognized that the riddle has two equally correct answers depending on context.
+
+While both interpretations are mathematically valid, we scored models based on whether they recognized the ambiguity in their first response, not which specific answer they chose. DeepSeek received full credit for presenting both cases; the others received partial credit for providing one valid answer without acknowledging the alternative.
+
+Scorecard
+
+Legend: Correct | Incorrect | Partially correct or ambiguous
+
+Riddle           | Claude 4.5 | Gemini 3 | GPT-4o   | DeepSeek   | Grok 4.1   | Perplexity | Llama 3.1 | Qwen 2.5
+Woman in Boat    | Mary       | Theresa  | Ann      | Andie      | What       | There      | Who       | Refused
+Impossible Math  | No sol.    | No sol.  | No sol.  | Base 5     | No sol.    | No sol.    | K=1/3     | No sol.
+Family Count     | 4          | 4        | 4        | 4          | 4          | 4          | 4         | 4
+Heavy Shadow     | Height=0   | Wooden   | Height=0 | Wooden     | Same rate  | Same size  | Iron      | Equal
+Calendar Trap    | Impossible | Impossible| Impossible| Impossible| Impossible | Friday     | Saturday  | Thursday
+Ice Riddle       | Salt       | Ice      | Ice      | Ice        | Ice        | Ice        | Iceberg   | Steam
+Mary's Daughter  | Single     | Single   | Single   | Both       | Single     | Single     | Grandma   | Single
+TOTAL            | 4.0/7      | 5.5/7    | 5.0/7    | 5.0/7      | 5.0/7      | 4.5/7      | 1.5/7     | 3.5/7
+
+Key Findings
+
+Local vs. Cloud Models
+
+Local models (Llama 3.1 8B: 1.5/7, Qwen 2.5 14B: 3.5/7) scored significantly lower than cloud models. This gap likely reflects both parameter count (8B/14B vs 70B+ for cloud models) and training data quality rather than fundamental architectural differences. The results suggest that for reasoning-heavy tasks, smaller local models remain limited despite their practical advantages in privacy and cost.
+
+Search-Augmented Does Not Equal More Accurate
+
+Perplexity, despite having web search access, scored 4.5/7—lower than several pure reasoning models. This challenges the assumption that retrieval-augmented generation (RAG) automatically improves accuracy. In fact, cached wrong answers can be worse than pure reasoning because they are presented with false confidence backed by "sources."
+
+Missing Ambiguity Recognition
+
+Five out of six models (83%) provided only a single interpretation of the Mary's Daughter riddle without acknowledging its ambiguity. They assumed "my daughter's mother" refers to a partner rather than potentially the speaker themselves. This reveals a limitation in reasoning completeness: models often converge on a single plausible answer rather than identifying and presenting all valid interpretations.
+
+Global Observations & Technical Takeaways
+
+Pattern Matching vs. Reasoning in LLMs
+
+The terminology "System 1" and "System 2" is borrowed from Daniel Kahneman's cognitive psychology research on human thinking. While LLMs don't think like humans, the metaphor describes two distinct behavioral modes:
+
+Pattern Matching (System 1): The model generates answers by predicting likely continuations based on training data. When asked a riddle, it retrieves common patterns it has seen before rather than parsing the specific logic. This is why models fail on "trick" questions—they're completing familiar templates, not reasoning from first principles.
+
+Chain-of-Thought (System 2): A prompting technique where you explicitly ask the model to show its reasoning step-by-step (e.g., "Let's think step by step"). The model generates intermediate reasoning tokens before the final answer. This uses the same architecture but changes the output sequence.
+
+Important: In this experiment, I did NOT use Chain-of-Thought prompting—the riddles were asked directly. Standard models (Claude 4.5, GPT-4o, Gemini 3 Pro) respond with direct answers unless prompted otherwise.
+
+Limitation: More reasoning steps don't guarantee correctness. Models can construct elaborate but fundamentally flawed logic—as seen with DeepSeek's Base 5 hallucination. The explanation sounds convincing but reaches a false conclusion.
+
+For deeper technical details:
+- The Illustrated GPT-2 - How language models predict the next token
+- Chain-of-Thought Prompting - Original CoT paper (Wei et al., 2022)
+- Zero-Shot Reasoners - "Let's think step by step" prompting (Kojima et al., 2022)
+
+Why This Matters for Practitioners
+
+1. Validation is Non-Negotiable: Even top-tier models can be confidently wrong. Always verify outputs against ground truth.
+2. Nudging Works: Claude's salt to ice correction shows that simple follow-ups can trigger a shift to System 2. Don't accept the first answer when stakes are high.
+3. Search Does Not Equal Reasoning: As seen with Perplexity, search-augmented models can retrieve wrong cached answers and present them as authoritative.
+
+Final Thought
+
+For Data Scientists and engineers, treat LLM outputs as hypotheses, not facts. Even "reasoning" models can hallucinate elegant proofs for false conclusions. The real value lies in using them to explore solution spaces, provided you maintain a robust verification layer.

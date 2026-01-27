@@ -93,7 +93,7 @@ def scan_documents(docs_dir: Path) -> Tuple[List[dict], List[str]]:
     if not docs_dir.exists():
         raise FileNotFoundError(f"Docs directory not found: {docs_dir}")
 
-    pdf_files = list(docs_dir.glob("*.pdf"))
+    pdf_files = list(docs_dir.glob("*.pdf")) + list(docs_dir.glob("*.txt"))
     valid_items = []
     missing_bibs = []
 
@@ -209,11 +209,14 @@ def main():
         print(f"Processing: {file_path.name}")
         
         try:
-            reader = PdfReader(str(file_path))
-            full_text = ""
-            for page in reader.pages:
-                text = page.extract_text()
-                if text: full_text += text + "\n"
+            if file_path.suffix == ".txt":
+                full_text = file_path.read_text(encoding='utf-8')
+            else:
+                reader = PdfReader(str(file_path))
+                full_text = ""
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text: full_text += text + "\n"
                 
             chunks = chunk_text(full_text)
             

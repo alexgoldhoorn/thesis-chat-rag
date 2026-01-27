@@ -1,0 +1,124 @@
+When LLMs Meet Structured Data: The Evaluation Challenge
+
+January 2026 - Technical Article
+
+We built an LLM agent to extract shipping data from PDFs, CSVs, and Excel spreadsheets. Modern LLMs can easily generate structured JSON. The challenge? Ensuring the output is actually correct. LLMs can produce complex outputs, but evaluation becomes equally complex.
+
+The problem? An LLM might output "15 tons" when your backend API demands the integer 15000. Or it might hallucinate fields, breaking the schema.
+
+We realized that LLM evaluation requires two judges: one for strict format compliance, and one for semantic correctness. Here is how we built a framework to satisfy both.
+
+The Problem: The Validation Gap
+
+When evaluating complex structured data, we had to verify on two levels:
+
+1. Syntactic Validity: Did it return valid JSON that matches the database schema?
+2. Semantic Accuracy: Is the data actually correct based on the document?
+
+The real challenge is not just getting the data, but getting it strictly formatted for backend systems. Our ingestion API is deterministic; it requires specific data fields (names) and precise types (category, number, date). It does not accept "15 tons"—it demands 15000 (as a number). It rejects "approx. 20 pallets".
+
+Expected (Ground Truth):
+
+{
+  "pickup": {
+    "location": "Barcelona",
+    "date": "2024-12-01"
+  },
+  "cargo": {
+    "type": "Hazardous",
+    "weight_kg": 15000
+  }
+}
+
+What the LLM actually returned:
+
+{
+  "pickup_location": "Barcelona, Spain",
+  "date": "01/12/2024",
+  "cargo": {
+    "type": "Dangerous Goods",
+    "weight": "15 tons",
+    "urgent": true
+  }
+}
+
+This created a complex validation hurdle. Standard equality checks failed on almost every line, even though the data was operationally "mostly correct."
+
+The Solution: A Two-Track Evaluation System
+
+We moved away from a binary "Pass/Fail" to a two-track system. We realized that strict ML metrics and LLM judges measure fundamentally different things, and we needed both.
+
+Track 1: Structured Metrics (Production Readiness)
+
+Goal: Ensure the data fits the backend schema.
+
+We treated JSON extraction as a Classification Problem. The key insight: every expected field in the schema is either correctly extracted, incorrectly extracted, missing, or hallucinated.
+
+Just as we classify images as "Cat" or "Not Cat," we classified every field in the expected schema into four buckets:
+
+1. True Positive: Field is present and value matches (within tolerance).
+2. False Negative (Recall): A required field (e.g., cargo.weight_kg) is missing or has the wrong key.
+3. False Positive (Precision): The model hallucinated a field (e.g., urgent: true).
+4. True Negative: The model correctly omitted an optional field that wasn't in the source.
+
+We implemented a recursive evaluator to calculate standard ML metrics: Precision, Recall, and F1.
+
+Why this matters: This track catches the "15 tons" vs 15000 error. It ensures the downstream API will not reject the payload.
+
+Track 2: LLM-as-a-Judge (Content Correctness)
+
+Goal: Ensure the data captures the correct meaning.
+
+While strict metrics catch format errors, they miss semantic intent. For this, we used GPT-4o (orchestrated via the DeepEval framework) to evaluate the complete JSON structure holistically.
+
+We chose GPT-4o for its strong reasoning on complex logic tasks and because using a different model than the agent (Claude Sonnet) reduced bias in evaluation.
+
+- Metric: Structured Data Accuracy (0-1 score).
+- Why this matters: It understands that if "Dangerous Goods" is mapped to cargo.type, it is semantically equivalent to "Hazardous," even if the strict string comparison in Track 1 failed.
+
+The Iteration Workflow
+
+We established a rigorous feedback loop using two distinct datasets to ensure we were not "teaching to the test."
+
+1. The Development Set: We used a small, challenging dataset for rapid prompt tuning.
+2. Process: We would tweak the prompt, run the Track 1 & 2 metrics, and analyze the failures.
+3. The Golden Set: Once we hit our threshold on the Development set (e.g., F1 > 0.8), we validated against a larger, immutable Golden Set before deploying.
+
+Results: The Interesting Tension
+
+After several iterations of prompt engineering:
+
+- Track 1 (Strict Metrics): F1 score improved by 0.23 and Accuracy by 0.2.
+- Track 2 (LLM Judge): The score actually dropped by 0.03.
+
+The Hypothesis:
+
+- We optimized for required fields only (to satisfy the database).
+- Track 1 rewarded this precision, so the metrics improved.
+- Track 2 penalized missing optional fields, so the score dropped slightly.
+
+Proof: The two judges measure fundamentally different things. One ensures the database does not break, and the other keeps an eye on the overall richness of the data.
+
+Future Challenges
+
+While this framework stabilized our production, clear challenges remain:
+
+- Fuzzy String Matching: Currently, we are strict with values. We should implement better fuzzy matching or embedding-based similarity for text fields (like notes) that do not require strict enum values but should not fail on minor phrasing differences. Using an LLM for this is accurate but expensive (due to latency and cost).
+- Interpretation Ambiguity: Sometimes multiple outputs are legally or operationally valid interpretations of the input document. Our ground truth assumes a single correct answer—too rigid for ambiguous documents.
+
+Key Takeaway
+
+We learned that LLM evaluation is not a single-metric game.
+
+- If we had relied only on Strict Metrics, we would have missed semantic nuance.
+- If we had relied only on the LLM Judge, we would have shipped data that was rejected by the API.
+
+Both are necessary. Neither is sufficient. To build reliable data extraction agents, you need a lawyer (Strict Metrics) to check the contract, and a philosopher (LLM Judge) to check the meaning.
+
+If you are building LLM data extraction, start by defining your required fields, then build both tracks into your evaluators from the start.
+
+Further Reading
+
+For more context on structured output requirements across different LLM providers:
+
+- Structured Output Comparison Across Popular LLM Providers - Comprehensive comparison of how OpenAI, Gemini, Anthropic, Mistral, and others handle structured output generation.

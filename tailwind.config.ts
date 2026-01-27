@@ -7,7 +7,17 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        primary: "#4A90E2",
+        "primary-dark": "#357ABD",
+        "text-dark": "#2C3E50",
+        "page-bg": "#f5f7fa",
+      },
+      fontFamily: {
+        sans: ["-apple-system", "BlinkMacSystemFont", "'Segoe UI'", "Roboto", "'Helvetica Neue'", "Arial", "sans-serif"],
+      },
+    },
   },
   // ADD THIS LINE:
   plugins: [require("@tailwindcss/typography")],

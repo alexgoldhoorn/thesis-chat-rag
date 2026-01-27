@@ -20,14 +20,18 @@ A RAG (Retrieval-Augmented Generation) chat app that lets users ask questions ab
 
 ### Environment Variables
 
-Create a `.env.local` file:
+Copy the example and fill in your keys:
 
+```bash
+cp .env.example .env.local
 ```
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
-GOOGLE_GENERATIVE_AI_API_KEY=...
-```
+
+| Variable | Used by | Where to get it |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Next.js + Python ingestion | [Supabase Dashboard](https://supabase.com/dashboard) → Project Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Next.js (vector search) | Same page, "anon public" key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Python ingestion only | Same page, "service_role" key |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | AI SDK (embeddings + LLM) + Python ingestion | [Google AI Studio](https://aistudio.google.com/apikey) |
 
 ### Database
 
@@ -37,7 +41,7 @@ Run `thesis-rag.sql` in your Supabase SQL editor to create the `documents` table
 
 ```bash
 cd scripts
-pip install -r requirements.txt  # or use uv
+uv sync
 python ingest.py --docs-dir ../docs
 ```
 

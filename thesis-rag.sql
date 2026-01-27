@@ -1,17 +1,25 @@
--- Enable the pgvector extension to work with embeddings
-create extension if not exists vector;
+-- Move pgvector to a dedicated schema (out of public)
+create schema if not exists extensions;
+create extension if not exists vector with schema extensions;
 
--- Create a table to store your thesis content
+-- Create a table to store thesis content
 create table documents (
   id bigserial primary key,
   content text,
   metadata jsonb,
-  embedding vector(768)
+  embedding extensions.vector(768)
 );
 
--- Create a function to search for documents
+-- Enable RLS and allow read-only access via anon key
+alter table documents enable row level security;
+
+create policy "Allow public read access"
+  on documents for select
+  using (true);
+
+-- Search function with immutable search_path
 create or replace function match_documents (
-  query_embedding vector(768),
+  query_embedding extensions.vector(768),
   match_threshold float,
   match_count int
 )
@@ -22,16 +30,17 @@ returns table (
   similarity float
 )
 language plpgsql
+set search_path = ''
 as $$
 begin
   return query
   select
-    documents.id,
-    documents.content,
-    documents.metadata,
-    1 - (documents.embedding <=> query_embedding) as similarity
-  from documents
-  where 1 - (documents.embedding <=> query_embedding) > match_threshold
+    d.id,
+    d.content,
+    d.metadata,
+    1 - (d.embedding operator(extensions.<=>) query_embedding) as similarity
+  from public.documents d
+  where 1 - (d.embedding operator(extensions.<=>) query_embedding) > match_threshold
   order by similarity desc
   limit match_count;
 end;

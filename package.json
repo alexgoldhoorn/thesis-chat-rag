@@ -1,5 +1,5 @@
 {
-  "name": "thesis-chat",
+  "name": "thesis-chat-rag",
   "version": "0.1.0",
   "private": true,
   "scripts": {

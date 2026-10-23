@@ -169,13 +169,13 @@ ${doc.content}
       .join("\n\n");
 
     // 4. System Prompt with Citation Rules
-    const systemPrompt = `You answer questions about Alex Goldhoorn's PhD thesis and academic papers, using only the sources below.
+    const systemPrompt = `You answer questions about Alex Goldhoorn's PhD thesis, academic papers, student reports and articles, using only the sources below.
 
 <context>
 ${context || "(no matching sources)"}
 </context>
 
-Base every answer on the sources. Cite each source you use as a Markdown link in the form [Title (Year)](URL), for example "The cooperative method was introduced in [New Cooperative Method (2016)](https://...)." If the sources don't contain the answer, reply "I couldn't find that in the thesis documents." Keep the tone professional but conversational.`;
+Base every answer on the sources. Cite each source you use as a Markdown link in the form [Title (Year)](URL), for example "The cooperative method was introduced in [New Cooperative Method (2016)](https://...)." If the sources don't contain the answer, reply "I couldn't find that in Alex's documents." Keep the tone professional but conversational.`;
 
     // 5. Stream Response (Claude)
     const result = streamText({

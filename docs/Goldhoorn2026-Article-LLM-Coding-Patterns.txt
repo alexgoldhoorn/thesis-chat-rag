@@ -1,0 +1,191 @@
+LLM Coding Patterns
+
+
+LLM Coding Patterns
+
+Started April 2026 · Living document · Appendix to
+
+From Autocomplete to AI Agents
+
+This is a running log of recurring patterns that I have encountered when using LLMs for coding work —
+across GitHub Copilot, Cursor, Claude Code, and others. Most are failure modes: not bugs but tendencies
+that appear across tools and models, and knowing them makes reviews faster. A few are shifts in how to
+work with these tools — like being more deliberate about cost.
+Each pattern appeared multiple times; some may fade with newer models.
+
+#1
+
+Over-engineering — solves the general case, not the specific one
+
+Observed: 2025 (Cursor), 2026 (GitHub Copilot, Claude)
+
+Given a concrete task, an LLM often solves the abstract version of it. It does not reuse the helper
+function that already exists elsewhere in the codebase — it writes a new one. It adds parameters for flexibility nobody asked
+for. It handles edge cases that do not exist in the codebase.
+
+The output is often
+correct
+but not
+appropriate
+. The feedback I give most often is
+to make as few changes as possible, keep it short, and reuse functions that are already there.
+
+code quality
+
+review burden
+
+#2
+
+Clumsy solutions — right answer, wrong path
+
+Observed: 2026
+
+Sometimes the logic works but the approach is not very efficient. A concrete example: getting the maximum date
+from a DataFrame by sorting the column and taking the last row, instead of calling
+.max()
+.
+It arrives at the right answer via the scenic route.
+
+code quality
+
+pandas
+
+The "scenic route" — correct destination, needlessly long path.
+
+#3
+
+Token budget surprises — runs out mid-flow
+
+Observed: 2025 (Warp)
+
+Monthly caps hit faster than you expect on an active project. You start a session
+with enthusiasm and hit a wall mid-task — sometimes mid-edit, leaving the file in an inconsistent state.
+
+It is not a model failure but a provider-imposed limitation — one worth keeping in mind. Starting big tasks
+early in a billing cycle and keeping local snapshots helps. Keeping track of remaining tokens
+and having fallback options ready also helps — a different model, the web interface, or a local
+model via Ollama.
+
+workflow
+
+cost
+
+#4
+
+Token leak / runaway output
+
+Observed: Apr 2026 (GitHub Copilot in VS Code) · Rare
+
+An endless stream of
+<s>
+tokens from GitHub Copilot — a special token leaking into
+the completion output, repeated until the session was killed. The only fix was to close and restart.
+
+Rare, but a useful reminder that there is a probabilistic system under the hood. When a model starts
+producing obviously malformed output, stop and restart rather than trying to work around it.
+
+model failure
+
+copilot
+
+rare
+
+#5
+
+Unit tests — confident but shallow
+
+Observed: 2025, 2026
+
+When I started using GitHub Copilot (2022), I mainly used it for code completion. But for actual
+code generation, unit tests were the main use case — and it is genuinely useful for that.
+The tests can be overly complex or too obvious though: they test a clean, trivial input
+that will always pass, rather than the edge cases that actually break things.
+
+Guide it explicitly: ask for edge cases, null inputs, boundary values — the default tends toward the happy path.
+I also often ask it to add a description of what each test is actually verifying.
+
+testing
+
+code quality
+
+#6
+
+Infinite reviewer — always finds something new
+
+Observed: Apr 2026 (GitHub Copilot PR reviewer, Claude)
+
+Asking an LLM to review code or text, fixing what it finds, and then reviewing again will keep producing
+new feedback. The second round surfaces things the first missed. The third finds more.
+It does not seem to converge quickly — it keeps finding things.
+
+I observed this with the GitHub Copilot PR reviewer (re-requesting a review after addressing comments)
+and with Claude when iterating on document drafts. Both kept finding issues across multiple rounds,
+none of which overlapped much with the previous ones.
+
+Two practical consequences: first, it is expensive — tokens and time — if you loop this unchecked.
+Second, and more importantly, it can pull the output away from your original intent. Each iteration
+optimises for what the reviewer flags, not for your goal. The document or the code starts to reflect
+the model's preferences rather than yours.
+
+The most important check is your own judgement: does the critique actually make sense? Not every flag
+is worth acting on. If you disagree with a suggestion, trust that — do not apply it just because the
+model flagged it. Beyond that: limit the number of review rounds upfront, and be explicit in the prompt
+about what is in scope and what is already settled.
+
+workflow
+
+cost
+
+review
+
+#7
+
+The efficiency turn — tokens aren't free
+
+Observed: June 2026 · A shift in practice, not a model failure
+
+The early phase of agentic coding was unconstrained: throw chat at
+anything
+, even a one-line
+change, and always reach for the
+best
+model. In 2026 that started to change as companies
+grew cautious about the bill. Uber made it concrete — according to
+
+Bloomberg
+,
+employees burned through Uber's entire 2026 AI coding budget in about four months, and the response was
+a guardrail: a monthly cap on token spend per developer, per coding tool (Cursor, Claude Code, and the
+like). Where pattern #3 was the
+provider's
+monthly cap, this is the
+employer's
+.
+
+To me this makes sense, and not only on the balance sheet. Models keep improving, but one of the ways
+they improve is by getting more
+efficient
+— and the inference behind every prompt uses real
+energy, literally. Being a bit more deliberate is no bad thing.
+
+So I try to be more thoughtful day-to-day: checking which model I actually need rather than defaulting
+to the biggest one (or letting GitHub Copilot's
+Auto
+model selection pick for me), and
+making the small edits myself instead of spinning up an agent for a two-character change. The instinct
+shifts from
+"always the best model for everything"
+to
+"the right model, in the right place,
+for the right task."
+
+cost
+
+workflow
+
+efficiency
+
+Alex Goldhoorn is a freelance Senior Data Scientist. Find more at
+
+goldhoorn.net
+.

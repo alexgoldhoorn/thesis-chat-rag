@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 # Must match the model and dimension used in app/api/chat/route.ts and db/init.sh.
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 768
+# Chunks per embed_content request: one request per batch instead of per chunk.
+EMBEDDING_BATCH_SIZE = 100
 
 genai_client: genai.Client | None = None
 
@@ -146,19 +148,19 @@ def sanitize_text(text: str) -> str:
     return text.replace("\x00", "")
 
 
-def get_embedding(text: str, max_retries: int = 3) -> List[float]:
+def get_embeddings(texts: List[str], max_retries: int = 3) -> List[List[float]]:
     for attempt in range(max_retries):
         try:
             assert genai_client is not None, "call setup_services() first"
             result = genai_client.models.embed_content(
                 model=EMBEDDING_MODEL,
-                contents=text,
+                contents=texts,
                 config=types.EmbedContentConfig(
                     task_type="RETRIEVAL_DOCUMENT",
                     output_dimensionality=EMBEDDING_DIMENSIONS,
                 ),
             )
-            return list(result.embeddings[0].values)
+            return [list(e.values) for e in result.embeddings]
         except Exception as e:
             if attempt < max_retries - 1:
                 wait = 2 ** (attempt + 1)
@@ -266,29 +268,36 @@ def main():
             chunks = chunk_text(full_text)
             file_errors = 0
 
-            for i, chunk in enumerate(chunks):
+            for start in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
+                batch = chunks[start : start + EMBEDDING_BATCH_SIZE]
                 try:
-                    embedding = get_embedding(chunk)
-                    conn.execute(
-                        "insert into documents (content, metadata, embedding)"
-                        " values (%s, %s, %s::vector)",
-                        (
-                            chunk,
-                            Json({**metadata, "chunk_index": i}),
-                            str(embedding),
-                        ),
+                    embeddings = get_embeddings(batch)
+                    with conn.cursor() as cur:
+                        cur.executemany(
+                            "insert into documents (content, metadata, embedding)"
+                            " values (%s, %s, %s::vector)",
+                            [
+                                (
+                                    chunk,
+                                    Json({**metadata, "chunk_index": start + j}),
+                                    str(embedding),
+                                )
+                                for j, (chunk, embedding) in enumerate(
+                                    zip(batch, embeddings, strict=True)
+                                )
+                            ],
+                        )
+                    print(
+                        f"  Chunk {start + len(batch)}/{len(chunks)}",
+                        end="\r",
                     )
 
-                    if i % 5 == 0:
-                        print(
-                            f"  Chunk {i + 1}/{len(chunks)}",
-                            end="\r",
-                        )
-
                 except Exception as e:
-                    file_errors += 1
-                    total_errors += 1
-                    print(f"  [Error] Chunk {i} failed: {e}")
+                    file_errors += len(batch)
+                    total_errors += len(batch)
+                    print(
+                        f"  [Error] Chunks {start}-{start + len(batch) - 1} failed: {e}"
+                    )
 
             status = f" ({file_errors} errors)" if file_errors else ""
             print(

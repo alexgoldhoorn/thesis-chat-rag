@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-RAG chat application for querying a PhD thesis and academic papers. Next.js 14 frontend with a single API route that performs vector search and streams AI responses.
+RAG chat application for querying a PhD thesis and academic papers. Next.js 16 frontend with a single API route that performs vector search and streams AI responses.
 
 ## Architecture
 
@@ -17,11 +17,11 @@ thesis-rag.sql        → Database schema (pgvector)
 
 ## Key Technical Details
 
-- **Embeddings:** Google Text-Embedding-004, 768 dimensions
-- **LLM:** Gemini 2.5-Flash via `@ai-sdk/google`
+- **Embeddings:** Google `gemini-embedding-001` with `outputDimensionality` 768 (`@ai-sdk/google` in the route, `google-genai` in ingestion; keep both in sync)
+- **LLM:** Claude via `@ai-sdk/anthropic`, model from `CHAT_MODEL` (default `claude-opus-5-5`), effort `low`, `fallbacks: "default"`
 - **Vector search:** Supabase RPC `match_documents` with cosine similarity, threshold 0.1, top 5 results
 - **Chunking:** 1000 chars with 100 char overlap (done in Python ingestion)
-- **Streaming:** AI SDK `streamText` with Server-Sent Events
+- **Streaming:** AI SDK `streamText` → `toUIMessageStream` → `createUIMessageStreamResponse`
 
 ## Commands
 
@@ -37,6 +37,8 @@ Required in `.env.local`:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (used only in ingestion script)
+- `ANTHROPIC_API_KEY`
+- `CHAT_MODEL` (optional)
 - `GOOGLE_GENERATIVE_AI_API_KEY`
 
 ## Conventions
@@ -44,4 +46,4 @@ Required in `.env.local`:
 - TypeScript strict mode
 - Path alias: `@/*` maps to project root
 - Tailwind CSS for styling
-- AI SDK v4 for LLM/embedding integration
+- AI SDK v7 for LLM/embedding integration (UI messages use `parts`, not `content`)

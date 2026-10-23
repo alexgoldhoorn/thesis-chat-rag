@@ -7,10 +7,17 @@ from typing import List, Dict, Any, Tuple
 
 # Third-party imports
 import bibtexparser
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from supabase import create_client, Client
 from pypdf import PdfReader
 from dotenv import load_dotenv
+
+# Must match the model and dimension used in app/api/chat/route.ts and thesis-rag.sql.
+EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_DIMENSIONS = 768
+
+genai_client: genai.Client | None = None
 
 
 def parse_arguments():
@@ -56,10 +63,11 @@ def setup_services(env_path: Path):
     if not all([supabase_url, supabase_key, google_key]):
         raise ValueError("Missing API keys in .env file.")
 
+    global genai_client
     supabase = create_client(supabase_url, supabase_key)
-    genai.configure(api_key=google_key)
+    genai_client = genai.Client(api_key=google_key)
 
-    return supabase, genai
+    return supabase, genai_client
 
 
 def parse_bib_file(bib_path: Path, filename: str) -> Dict[str, Any]:
@@ -138,12 +146,16 @@ def sanitize_text(text: str) -> str:
 def get_embedding(text: str, max_retries: int = 3) -> List[float]:
     for attempt in range(max_retries):
         try:
-            result = genai.embed_content(
-                model="models/text-embedding-004",
-                content=text,
-                task_type="retrieval_document",
+            assert genai_client is not None, "call setup_services() first"
+            result = genai_client.models.embed_content(
+                model=EMBEDDING_MODEL,
+                contents=text,
+                config=types.EmbedContentConfig(
+                    task_type="RETRIEVAL_DOCUMENT",
+                    output_dimensionality=EMBEDDING_DIMENSIONS,
+                ),
             )
-            return result["embedding"]
+            return list(result.embeddings[0].values)
         except Exception as e:
             if attempt < max_retries - 1:
                 wait = 2 ** (attempt + 1)

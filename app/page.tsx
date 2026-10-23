@@ -3,11 +3,12 @@
 import { useChat } from "@ai-sdk/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function Chat() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } =
-    useChat();
+  const [input, setInput] = useState("");
+  const { messages, sendMessage, status, error } = useChat();
+  const isLoading = status === "submitted" || status === "streaming";
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -50,22 +51,7 @@ export default function Chat() {
                 <button
                   key={q}
                   type="button"
-                  onClick={() => {
-                    const nativeInputValueSetter =
-                      Object.getOwnPropertyDescriptor(
-                        window.HTMLInputElement.prototype,
-                        "value"
-                      )?.set;
-                    const inputEl = document.querySelector(
-                      'input[type="text"]'
-                    ) as HTMLInputElement;
-                    if (inputEl && nativeInputValueSetter) {
-                      nativeInputValueSetter.call(inputEl, q);
-                      inputEl.dispatchEvent(
-                        new Event("input", { bubbles: true })
-                      );
-                    }
-                  }}
+                  onClick={() => setInput(q)}
                   className="px-4 py-2 text-sm bg-white border border-gray-200 rounded-lg text-text-dark hover:border-primary hover:shadow-sm transition-all cursor-pointer"
                 >
                   {q}
@@ -95,6 +81,7 @@ export default function Chat() {
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- keep `node` off the DOM element
                     a: ({ node, ...props }) => (
                       <a
                         {...props}
@@ -105,7 +92,9 @@ export default function Chat() {
                     ),
                   }}
                 >
-                  {m.content}
+                  {m.parts
+                    .map((part) => (part.type === "text" ? part.text : ""))
+                    .join("")}
                 </ReactMarkdown>
               </div>
             </div>
@@ -121,17 +110,33 @@ export default function Chat() {
           </div>
         )}
 
+        {error && (
+          <div className="flex justify-start">
+            <div className="bg-red-50 p-4 rounded-xl border border-red-200 text-red-700 text-sm shadow-sm">
+              Something went wrong. Please try again.
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="flex gap-3 pt-2">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!input.trim()) return;
+          sendMessage({ text: input });
+          setInput("");
+        }}
+        className="flex gap-3 pt-2"
+      >
         <input
           type="text"
           className="flex-1 p-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-text-dark placeholder-gray-400 transition-all shadow-sm"
           value={input}
           placeholder="Ask a question about my research..."
-          onChange={handleInputChange}
+          onChange={(e) => setInput(e.target.value)}
           disabled={isLoading}
         />
         <button

@@ -12,7 +12,8 @@ build/
 
 # Environment Variables (NEVER commit these)
 .env
-.env*.local
+.env*
+!.env.example
 
 # System
 .DS_Store
@@ -27,9 +28,6 @@ Thumbs.db
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
-
-# Vercel
-.vercel
 
 # Debug
 npm-debug.log*

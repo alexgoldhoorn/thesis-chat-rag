@@ -9,11 +9,12 @@ from typing import List, Dict, Any, Tuple
 import bibtexparser
 from google import genai
 from google.genai import types
-from supabase import create_client, Client
+import psycopg
+from psycopg.types.json import Json
 from pypdf import PdfReader
 from dotenv import load_dotenv
 
-# Must match the model and dimension used in app/api/chat/route.ts and thesis-rag.sql.
+# Must match the model and dimension used in app/api/chat/route.ts and db/init.sh.
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 768
 
@@ -22,7 +23,7 @@ genai_client: genai.Client | None = None
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Ingest PDF documents with BibTeX metadata into Supabase."
+        description="Ingest PDF documents with BibTeX metadata into Postgres (pgvector)."
     )
 
     script_dir = Path(__file__).resolve().parent
@@ -56,18 +57,20 @@ def setup_services(env_path: Path):
 
     load_dotenv(env_path)
 
-    supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    # The ingest role (write access), not the app's read-only role.
+    database_url = os.getenv("INGEST_DATABASE_URL")
     google_key = os.getenv("GOOGLE_GENERATIVE_AI_API_KEY")
 
-    if not all([supabase_url, supabase_key, google_key]):
-        raise ValueError("Missing API keys in .env file.")
+    if not all([database_url, google_key]):
+        raise ValueError(
+            "INGEST_DATABASE_URL and GOOGLE_GENERATIVE_AI_API_KEY must be set in the .env file."
+        )
 
     global genai_client
-    supabase = create_client(supabase_url, supabase_key)
+    conn = psycopg.connect(database_url, autocommit=True)
     genai_client = genai.Client(api_key=google_key)
 
-    return supabase, genai_client
+    return conn, genai_client
 
 
 def parse_bib_file(bib_path: Path, filename: str) -> Dict[str, Any]:
@@ -129,10 +132,10 @@ def scan_documents(docs_dir: Path) -> Tuple[List[dict], List[str]]:
     return valid_items, missing_bibs
 
 
-def truncate_database(supabase: Client):
+def truncate_database(conn: psycopg.Connection):
     print("\n[Action] Truncating 'documents' table...")
     try:
-        supabase.table("documents").delete().neq("id", 0).execute()
+        conn.execute("truncate documents restart identity")
         print("  ✓ Table cleared.")
     except Exception as e:
         print(f"  [Error] Failed to truncate table: {e}")
@@ -228,14 +231,14 @@ def main():
 
     # 4. Connect to Services
     try:
-        supabase, _ = setup_services(args.env_file)
+        conn, _ = setup_services(args.env_file)
     except Exception as e:
         print(f"Connection failed: {e}")
         return
 
     # 5. Truncate if requested
     if args.truncate:
-        truncate_database(supabase)
+        truncate_database(conn)
 
     # 6. Ingestion Loop
     print("\nStarting Ingestion...")
@@ -266,12 +269,15 @@ def main():
             for i, chunk in enumerate(chunks):
                 try:
                     embedding = get_embedding(chunk)
-                    data = {
-                        "content": chunk,
-                        "metadata": {**metadata, "chunk_index": i},
-                        "embedding": embedding,
-                    }
-                    supabase.table("documents").insert(data).execute()
+                    conn.execute(
+                        "insert into documents (content, metadata, embedding)"
+                        " values (%s, %s, %s::vector)",
+                        (
+                            chunk,
+                            Json({**metadata, "chunk_index": i}),
+                            str(embedding),
+                        ),
+                    )
 
                     if i % 5 == 0:
                         print(

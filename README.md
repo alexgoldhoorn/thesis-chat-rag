@@ -34,6 +34,7 @@ cp .env.example .env
 | `INGEST_DATABASE_URL` | Python ingestion only | `ingest` role (write access) |
 | `ANTHROPIC_API_KEY` | AI SDK (LLM answers) | [Claude Console](https://platform.claude.com/settings/keys) |
 | `CHAT_MODEL` (optional) | Claude model id, default `claude-opus-5-5` | e.g. `claude-sonnet-5-5`, `claude-haiku-5-5` |
+| `DAILY_ANSWER_LIMIT` (optional) | Max answers per day across all visitors, default 200 | Spend backstop for the public route |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | AI SDK (query embeddings) + Python ingestion | [Google AI Studio](https://aistudio.google.com/apikey) |
 
 ### Database
@@ -66,7 +67,7 @@ npm run dev
 
 The `Dockerfile` builds a Next.js standalone image. Runtime config (`DATABASE_URL`, API keys) comes from the environment; nothing secret is baked into the image.
 
-The public route caps each request: question length, history length and answer length.
+The public route caps each request (question length, history length, answer length) and the whole day (`DAILY_ANSWER_LIMIT`).
 
 ## How It Works
 

@@ -39,6 +39,7 @@ Required in `.env`:
 - `INGEST_DATABASE_URL` (used only in ingestion script)
 - `ANTHROPIC_API_KEY`
 - `CHAT_MODEL` (optional)
+- `DAILY_ANSWER_LIMIT` (optional, default 200 answers/day across all visitors)
 - `GOOGLE_GENERATIVE_AI_API_KEY`
 
 ## Conventions

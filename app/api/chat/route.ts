@@ -31,6 +31,25 @@ const MAX_MESSAGE_CHARS = 8000;
 const MAX_HISTORY_MESSAGES = 10;
 const MAX_OUTPUT_TOKENS = 1500;
 
+// Global backstop on Anthropic spend: at most DAILY_ANSWER_LIMIT answers per
+// day (Europe/Madrid) across all visitors. In memory, so a restart resets it;
+// fine for a single container.
+const DAILY_ANSWER_LIMIT = Number(process.env.DAILY_ANSWER_LIMIT) || 200;
+const answersToday = { day: "", count: 0 };
+
+function takeDailySlot() {
+  const day = new Date().toLocaleDateString("sv-SE", {
+    timeZone: "Europe/Madrid",
+  });
+  if (answersToday.day !== day) {
+    answersToday.day = day;
+    answersToday.count = 0;
+  }
+  if (answersToday.count >= DAILY_ANSWER_LIMIT) return false;
+  answersToday.count++;
+  return true;
+}
+
 function badRequest(message: string) {
   return new Response(JSON.stringify({ error: message }), { status: 400 });
 }
@@ -90,6 +109,16 @@ export async function POST(req: Request) {
     if (question.length > MAX_QUESTION_CHARS) {
       return badRequest(
         `Please keep questions under ${MAX_QUESTION_CHARS} characters.`
+      );
+    }
+
+    if (!takeDailySlot()) {
+      console.warn(`Daily answer limit (${DAILY_ANSWER_LIMIT}) reached`);
+      return new Response(
+        JSON.stringify({
+          error: "The chat has answered enough questions for today. Please try again tomorrow.",
+        }),
+        { status: 503 }
       );
     }
 

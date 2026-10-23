@@ -5,6 +5,16 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useEffect, useRef, useState } from "react";
 
+// The route answers errors as {"error": "..."}; anything else (e.g. the proxy's
+// 429 page) gets the generic message.
+function errorText(error: Error) {
+  try {
+    const parsed = JSON.parse(error.message);
+    if (typeof parsed?.error === "string") return parsed.error;
+  } catch {}
+  return "Something went wrong. Please try again.";
+}
+
 export default function Chat() {
   const [input, setInput] = useState("");
   const { messages, sendMessage, status, error } = useChat();
@@ -113,7 +123,7 @@ export default function Chat() {
         {error && (
           <div className="flex justify-start">
             <div className="bg-red-50 p-4 rounded-xl border border-red-200 text-red-700 text-sm shadow-sm">
-              Something went wrong. Please try again.
+              {errorText(error)}
             </div>
           </div>
         )}

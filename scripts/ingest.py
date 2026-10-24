@@ -20,9 +20,10 @@ EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 768
 # The free tier counts every text in a batch as one request, against a limit of
 # 100 per minute (plus a tokens-per-minute cap), so batching saves round trips
-# but not quota: send 50 texts at a time and pace them to stay under the limit.
-EMBEDDING_BATCH_SIZE = 50
-EMBEDDINGS_PER_MINUTE = 90
+# but not quota. Dense PDFs also hit the tokens-per-minute cap at 90 texts a
+# minute, so send 25 at a time, 45 a minute.
+EMBEDDING_BATCH_SIZE = 25
+EMBEDDINGS_PER_MINUTE = 45
 
 genai_client: genai.Client | None = None
 last_batch_at = 0.0
@@ -173,6 +174,11 @@ def retry_delay(error: Exception) -> float | None:
     return float(match.group(1)) if match else None
 
 
+def quota_ids(error: Exception) -> str:
+    """The quota names in a 429, e.g. EmbedContentRequestsPerMinute...-FreeTier."""
+    return ", ".join(re.findall(r"quotaId': '([^']+)'", str(error))) or str(error)[:200]
+
+
 def pace(batch_len: int):
     """Sleep so that batches stay under EMBEDDINGS_PER_MINUTE."""
     global last_batch_at
@@ -199,10 +205,10 @@ def get_embeddings(texts: List[str], max_retries: int = 5) -> List[List[float]]:
             return [list(e.values) for e in result.embeddings]
         except Exception as e:
             if "PerDay" in str(e):
-                raise DailyQuotaExhausted(str(e)) from e
+                raise DailyQuotaExhausted(quota_ids(e)) from e
             if attempt < max_retries - 1:
                 wait = (retry_delay(e) or 2 ** (attempt + 1)) + 2
-                print(f"  [Retry] Embedding failed, retrying in {wait}s... ({e})")
+                print(f"  [Retry] Embedding failed, retrying in {wait:.0f}s... ({quota_ids(e)})")
                 time.sleep(wait)
             else:
                 raise
@@ -362,7 +368,7 @@ def main():
                     file_errors += len(batch)
                     total_errors += len(batch)
                     print(
-                        f"  [Error] Chunks {start}-{start + len(batch) - 1} failed: {e}"
+                        f"  [Error] Chunks {start}-{start + len(batch) - 1} failed: {quota_ids(e)}"
                     )
 
             status = f" ({file_errors} errors)" if file_errors else ""

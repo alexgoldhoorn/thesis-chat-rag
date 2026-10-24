@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -17,10 +18,18 @@ from dotenv import load_dotenv
 # Must match the model and dimension used in app/api/chat/route.ts and db/init.sh.
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 768
-# Chunks per embed_content request: one request per batch instead of per chunk.
-EMBEDDING_BATCH_SIZE = 100
+# The free tier counts every text in a batch as one request, against a limit of
+# 100 per minute (plus a tokens-per-minute cap), so batching saves round trips
+# but not quota: send 50 texts at a time and pace them to stay under the limit.
+EMBEDDING_BATCH_SIZE = 50
+EMBEDDINGS_PER_MINUTE = 90
 
 genai_client: genai.Client | None = None
+last_batch_at = 0.0
+
+
+class DailyQuotaExhausted(Exception):
+    pass
 
 
 def parse_arguments():
@@ -43,6 +52,16 @@ def parse_arguments():
         type=Path,
         default=default_env,
         help="Path to the .env file.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip files already fully stored; re-ingest incomplete ones.",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Do not ask for confirmation.",
     )
     parser.add_argument(
         "--truncate",
@@ -148,8 +167,25 @@ def sanitize_text(text: str) -> str:
     return text.replace("\x00", "")
 
 
-def get_embeddings(texts: List[str], max_retries: int = 3) -> List[List[float]]:
+def retry_delay(error: Exception) -> float | None:
+    """Seconds the API asks us to wait on a 429, if it says."""
+    match = re.search(r"retry in ([0-9.]+)s", str(error))
+    return float(match.group(1)) if match else None
+
+
+def pace(batch_len: int):
+    """Sleep so that batches stay under EMBEDDINGS_PER_MINUTE."""
+    global last_batch_at
+    min_gap = 60 * batch_len / EMBEDDINGS_PER_MINUTE
+    wait = last_batch_at + min_gap - time.monotonic()
+    if wait > 0:
+        time.sleep(wait)
+    last_batch_at = time.monotonic()
+
+
+def get_embeddings(texts: List[str], max_retries: int = 5) -> List[List[float]]:
     for attempt in range(max_retries):
+        pace(len(texts))
         try:
             assert genai_client is not None, "call setup_services() first"
             result = genai_client.models.embed_content(
@@ -162,8 +198,10 @@ def get_embeddings(texts: List[str], max_retries: int = 3) -> List[List[float]]:
             )
             return [list(e.values) for e in result.embeddings]
         except Exception as e:
+            if "PerDay" in str(e):
+                raise DailyQuotaExhausted(str(e)) from e
             if attempt < max_retries - 1:
-                wait = 2 ** (attempt + 1)
+                wait = (retry_delay(e) or 2 ** (attempt + 1)) + 2
                 print(f"  [Retry] Embedding failed, retrying in {wait}s... ({e})")
                 time.sleep(wait)
             else:
@@ -183,13 +221,27 @@ def chunk_text(
     return chunks
 
 
+def stored_chunks(conn: psycopg.Connection, source: str) -> int:
+    row = conn.execute(
+        "select count(*) from documents where metadata->>'source' = %s", (source,)
+    ).fetchone()
+    return row[0] if row else 0
+
+
+ASSUME_YES = False
+
+
 def confirm_action(prompt: str) -> bool:
+    if ASSUME_YES:
+        return True
     response = input(f"{prompt} (y/n): ").strip().lower()
     return response == "y"
 
 
 def main():
     args = parse_arguments()
+    global ASSUME_YES
+    ASSUME_YES = args.yes
 
     # 1. Scan Files
     print(f"Scanning directory: {args.docs_dir} ...")
@@ -268,6 +320,18 @@ def main():
             chunks = chunk_text(full_text)
             file_errors = 0
 
+            if args.resume:
+                stored = stored_chunks(conn, metadata["source"])
+                if stored == len(chunks):
+                    print(f"  Skipped: all {stored} chunks already stored")
+                    continue
+                if stored:
+                    conn.execute(
+                        "delete from documents where metadata->>'source' = %s",
+                        (metadata["source"],),
+                    )
+                    print(f"  Removed {stored} partial chunks")
+
             for start in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
                 batch = chunks[start : start + EMBEDDING_BATCH_SIZE]
                 try:
@@ -292,6 +356,8 @@ def main():
                         end="\r",
                     )
 
+                except DailyQuotaExhausted:
+                    raise
                 except Exception as e:
                     file_errors += len(batch)
                     total_errors += len(batch)
@@ -305,11 +371,17 @@ def main():
                 + " " * 20
             )
 
+        except DailyQuotaExhausted as e:
+            print(f"\n[Stopped] Daily embedding quota exhausted: {e}")
+            print("Run again with --resume after the quota resets.")
+            sys.exit(2)
         except Exception as e:
             total_errors += 1
             print(f"  [Error] Failed to read file: {e}")
 
     print(f"\n✅ Ingestion Complete! ({total} files, {total_errors} errors)")
+    if total_errors:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

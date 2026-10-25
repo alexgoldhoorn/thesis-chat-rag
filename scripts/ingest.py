@@ -21,9 +21,10 @@ EMBEDDING_DIMENSIONS = 768
 # The free tier counts every text in a batch as one request, against a limit of
 # 100 per minute (plus a tokens-per-minute cap), so batching saves round trips
 # but not quota. Dense PDFs also hit the tokens-per-minute cap at 90 texts a
-# minute, so send 25 at a time, 45 a minute.
+# minute, and retries count against the daily quota, so send 25 at a time,
+# 30 a minute.
 EMBEDDING_BATCH_SIZE = 25
-EMBEDDINGS_PER_MINUTE = 45
+EMBEDDINGS_PER_MINUTE = 30
 
 genai_client: genai.Client | None = None
 last_batch_at = 0.0
@@ -227,11 +228,13 @@ def chunk_text(
     return chunks
 
 
-def stored_chunks(conn: psycopg.Connection, source: str) -> int:
-    row = conn.execute(
-        "select count(*) from documents where metadata->>'source' = %s", (source,)
-    ).fetchone()
-    return row[0] if row else 0
+def stored_chunk_indexes(conn: psycopg.Connection, source: str) -> List[int]:
+    rows = conn.execute(
+        "select (metadata->>'chunk_index')::int from documents"
+        " where metadata->>'source' = %s",
+        (source,),
+    ).fetchall()
+    return [row[0] for row in rows]
 
 
 ASSUME_YES = False
@@ -326,20 +329,30 @@ def main():
             chunks = chunk_text(full_text)
             file_errors = 0
 
+            todo = list(range(len(chunks)))
             if args.resume:
-                stored = stored_chunks(conn, metadata["source"])
-                if stored == len(chunks):
-                    print(f"  Skipped: all {stored} chunks already stored")
-                    continue
-                if stored:
+                stored = stored_chunk_indexes(conn, metadata["source"])
+                if len(stored) != len(set(stored)) or any(
+                    i >= len(chunks) for i in stored
+                ):
+                    # Duplicates or a different chunking: start this file over.
                     conn.execute(
                         "delete from documents where metadata->>'source' = %s",
                         (metadata["source"],),
                     )
-                    print(f"  Removed {stored} partial chunks")
+                    print(f"  Removed {len(stored)} inconsistent chunks")
+                    stored = []
+                todo = [i for i in todo if i not in set(stored)]
+                if not todo:
+                    print(f"  Skipped: all {len(chunks)} chunks already stored")
+                    continue
+                if stored:
+                    print(f"  Resuming: {len(todo)} of {len(chunks)} chunks missing")
 
-            for start in range(0, len(chunks), EMBEDDING_BATCH_SIZE):
-                batch = chunks[start : start + EMBEDDING_BATCH_SIZE]
+            for pos in range(0, len(todo), EMBEDDING_BATCH_SIZE):
+                indexes = todo[pos : pos + EMBEDDING_BATCH_SIZE]
+                batch = [chunks[i] for i in indexes]
+                start = indexes[0]
                 try:
                     embeddings = get_embeddings(batch)
                     with conn.cursor() as cur:
@@ -349,16 +362,16 @@ def main():
                             [
                                 (
                                     chunk,
-                                    Json({**metadata, "chunk_index": start + j}),
+                                    Json({**metadata, "chunk_index": i}),
                                     str(embedding),
                                 )
-                                for j, (chunk, embedding) in enumerate(
-                                    zip(batch, embeddings, strict=True)
+                                for i, chunk, embedding in zip(
+                                    indexes, batch, embeddings, strict=True
                                 )
                             ],
                         )
                     print(
-                        f"  Chunk {start + len(batch)}/{len(chunks)}",
+                        f"  Chunk {indexes[-1] + 1}/{len(chunks)}",
                         end="\r",
                     )
 
@@ -368,7 +381,7 @@ def main():
                     file_errors += len(batch)
                     total_errors += len(batch)
                     print(
-                        f"  [Error] Chunks {start}-{start + len(batch) - 1} failed: {quota_ids(e)}"
+                        f"  [Error] Chunks {start}-{indexes[-1]} failed: {quota_ids(e)}"
                     )
 
             status = f" ({file_errors} errors)" if file_errors else ""

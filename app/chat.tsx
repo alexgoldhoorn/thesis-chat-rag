@@ -38,19 +38,31 @@ function errorText(error: Error) {
   return "Something went wrong. Please try again.";
 }
 
-type ArxivOutput = { query?: string; papers?: unknown[]; error?: string };
+type ToolOutput = { query?: string; papers?: unknown[]; paper?: { title?: string }; error?: string };
+type ToolInput = { query?: string; title?: string; id?: string; direction?: string };
 
-// One status line per arxiv_search call, shown above the answer text.
-function arxivStatus(part: UIMessage["parts"][number]) {
-  if (part.type !== "tool-arxiv_search") return null;
-  const query = (part.input as { query?: string } | undefined)?.query;
+const TOOL_LABELS: Record<string, string> = {
+  "tool-arxiv_search": "Searched arXiv",
+  "tool-scholar_search": "Searched Semantic Scholar",
+  "tool-scholar_paper": "Looked up on Semantic Scholar",
+  "tool-scholar_links": "Listed on Semantic Scholar",
+};
+
+// One status line per research-tool call, shown above the answer text.
+function toolStatus(part: UIMessage["parts"][number]) {
+  const label = TOOL_LABELS[part.type];
+  if (!label || !("state" in part)) return null;
+  const input = (("input" in part && part.input) || {}) as ToolInput;
+  const subject =
+    input.direction ?? `“${input.query ?? input.title ?? input.id ?? ""}”`;
   if (part.state === "output-available") {
-    const output = part.output as ArxivOutput;
-    if (output.error) return `arXiv search failed: ${output.error}`;
-    return `Searched arXiv for “${output.query ?? query}” (${output.papers?.length ?? 0} results)`;
+    const output = (("output" in part && part.output) || {}) as ToolOutput;
+    if (output.error) return `${label}: ${output.error}`;
+    if (output.paper) return `${label}: “${output.paper.title}”`;
+    return `${label}: ${subject} (${output.papers?.length ?? 0} results)`;
   }
-  if (part.state === "output-error") return "arXiv search failed.";
-  return query ? `Searching arXiv for “${query}”…` : "Searching arXiv…";
+  if (part.state === "output-error") return `${label}: failed.`;
+  return `${label.replace(/^(Searched|Looked up|Listed)/, "Looking up")}: ${subject}…`;
 }
 
 // Drops ?doc= from the address bar, so a reload opens the general chat.
@@ -210,7 +222,7 @@ export default function Chat({
               }`}
             >
               {m.parts.map((part, i) => {
-                const status = arxivStatus(part);
+                const status = toolStatus(part);
                 return (
                   status && (
                     <p key={i} className="mb-2 text-xs text-gray-400 italic">

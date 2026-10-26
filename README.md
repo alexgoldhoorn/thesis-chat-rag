@@ -36,6 +36,8 @@ cp .env.example .env
 | `CHAT_MODEL` (optional) | Claude model id, default `claude-opus-5-5` | e.g. `claude-sonnet-5-5`, `claude-haiku-5-5` |
 | `DAILY_ANSWER_LIMIT` (optional) | Max answers per day across all visitors, default 200 | Spend backstop for the public route |
 | `ARXIV_SEARCH` (optional) | `off` disables the arXiv search tool | On by default |
+| `SEMANTIC_SCHOLAR` (optional) | `off` disables the Semantic Scholar tools | On by default |
+| `SEMANTIC_SCHOLAR_API_KEY` (optional) | Semantic Scholar key; without one, keyword search is usually rate-limited | [Semantic Scholar API](https://www.semanticscholar.org/product/api#api-key-form) |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | AI SDK (query embeddings) + Python ingestion | [Google AI Studio](https://aistudio.google.com/apikey) |
 
 ### Database
@@ -93,4 +95,11 @@ In focus mode retrieval takes up to 6 chunks from that document plus up to 3 fro
 4. Chunks + metadata are passed as context to Claude
 5. Claude streams a response with citations back to the user
 
-For questions about cited or related work outside the corpus, Claude can call an `arxiv_search` tool (public arXiv API, abstracts only, at most 2 searches per answer, requests spaced 3 s apart as arXiv asks, 1-hour cache). External papers are labelled as not Alex's work; the page shows each search as a status line. `ARXIV_SEARCH=off` turns it off and restores the documents-only prompt.
+For questions about cited or related work outside the corpus, Claude can call research tools, at most 3 lookups per answer (`app/lib/research-tools.ts`):
+
+- `arxiv_search`: arXiv preprints, abstracts only (requests spaced 3 s apart, as arXiv asks)
+- `scholar_paper`: one paper from any venue by title or DOI/arXiv id (Semantic Scholar)
+- `scholar_links`: up to 10 references or citations of a paper
+- `scholar_search`: keyword search (usually needs `SEMANTIC_SCHOLAR_API_KEY`)
+
+Results are cached for an hour. External papers are labelled as not Alex's work; the page shows each lookup as a status line. With both sources off (`ARXIV_SEARCH=off`, `SEMANTIC_SCHOLAR=off`) the documents-only prompt is used.

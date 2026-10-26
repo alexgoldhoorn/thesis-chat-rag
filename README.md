@@ -35,6 +35,7 @@ cp .env.example .env
 | `ANTHROPIC_API_KEY` | AI SDK (LLM answers) | [Claude Console](https://platform.claude.com/settings/keys) |
 | `CHAT_MODEL` (optional) | Claude model id, default `claude-opus-5-5` | e.g. `claude-sonnet-5-5`, `claude-haiku-5-5` |
 | `DAILY_ANSWER_LIMIT` (optional) | Max answers per day across all visitors, default 200 | Spend backstop for the public route |
+| `ARXIV_SEARCH` (optional) | `off` disables the arXiv search tool | On by default |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | AI SDK (query embeddings) + Python ingestion | [Google AI Studio](https://aistudio.google.com/apikey) |
 
 ### Database
@@ -91,3 +92,5 @@ In focus mode retrieval takes up to 6 chunks from that document plus up to 3 fro
 3. Top 5 matching document chunks are retrieved via vector similarity search
 4. Chunks + metadata are passed as context to Claude
 5. Claude streams a response with citations back to the user
+
+For questions about cited or related work outside the corpus, Claude can call an `arxiv_search` tool (public arXiv API, abstracts only, at most 2 searches per answer, requests spaced 3 s apart as arXiv asks, 1-hour cache). External papers are labelled as not Alex's work; the page shows each search as a status line. `ARXIV_SEARCH=off` turns it off and restores the documents-only prompt.

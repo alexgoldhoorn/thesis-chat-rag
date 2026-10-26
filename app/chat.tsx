@@ -1,6 +1,7 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
+import type { UIMessage } from "ai";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useEffect, useRef, useState } from "react";
@@ -35,6 +36,21 @@ function errorText(error: Error) {
     if (typeof parsed?.error === "string") return parsed.error;
   } catch {}
   return "Something went wrong. Please try again.";
+}
+
+type ArxivOutput = { query?: string; papers?: unknown[]; error?: string };
+
+// One status line per arxiv_search call, shown above the answer text.
+function arxivStatus(part: UIMessage["parts"][number]) {
+  if (part.type !== "tool-arxiv_search") return null;
+  const query = (part.input as { query?: string } | undefined)?.query;
+  if (part.state === "output-available") {
+    const output = part.output as ArxivOutput;
+    if (output.error) return `arXiv search failed: ${output.error}`;
+    return `Searched arXiv for “${output.query ?? query}” (${output.papers?.length ?? 0} results)`;
+  }
+  if (part.state === "output-error") return "arXiv search failed.";
+  return query ? `Searching arXiv for “${query}”…` : "Searching arXiv…";
 }
 
 // Drops ?doc= from the address bar, so a reload opens the general chat.
@@ -193,6 +209,16 @@ export default function Chat({
                   : "bg-white text-text-dark border-gray-200"
               }`}
             >
+              {m.parts.map((part, i) => {
+                const status = arxivStatus(part);
+                return (
+                  status && (
+                    <p key={i} className="mb-2 text-xs text-gray-400 italic">
+                      {status}
+                    </p>
+                  )
+                );
+              })}
               <div
                 className={`prose prose-sm max-w-none ${
                   m.role === "user" ? "prose-invert" : ""

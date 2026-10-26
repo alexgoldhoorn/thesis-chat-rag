@@ -22,7 +22,8 @@ create table documents (
 create or replace function match_documents (
   query_embedding vector(768),
   match_threshold float,
-  match_count int
+  match_count int,
+  filter_source text default null
 )
 returns table (
   id bigint,
@@ -40,18 +41,19 @@ as $$
     1 - (d.embedding <=> query_embedding) as similarity
   from documents d
   where 1 - (d.embedding <=> query_embedding) > match_threshold
+    and (filter_source is null or d.metadata->>'source' = filter_source)
   order by similarity desc
   limit least(match_count, 20);
 $$;
 
 revoke all on schema public from public;
-revoke all on function match_documents(vector, float, int) from public;
+revoke all on function match_documents(vector, float, int, text) from public;
 
 create role chat_ro login password :'chat_pw';
 grant connect on database :"DBNAME" to chat_ro;
 grant usage on schema public to chat_ro;
 grant select on documents to chat_ro;
-grant execute on function match_documents(vector, float, int) to chat_ro;
+grant execute on function match_documents(vector, float, int, text) to chat_ro;
 
 create role ingest login password :'ingest_pw';
 grant connect on database :"DBNAME" to ingest;

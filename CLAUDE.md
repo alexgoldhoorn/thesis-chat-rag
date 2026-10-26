@@ -7,12 +7,16 @@ RAG chat application for querying a PhD thesis and academic papers. Next.js 16 f
 ## Architecture
 
 ```
-app/page.tsx          → Chat UI (React client component)
+app/page.tsx          → Reads ?doc= / ?q= and renders the chat
+app/chat.tsx          → Chat UI (React client component), focus chip
 app/api/chat/route.ts → RAG endpoint: embed query → vector search → stream LLM response
+app/api/docs/route.ts → Ingested document list (slugs for ?doc= links)
+app/lib/              → db pool, cached document list, pure focus helpers (+ Vitest tests)
 app/layout.tsx        → Root layout
 scripts/ingest.py     → PDF ingestion pipeline (Python)
 docs/                 → Source PDFs + BibTeX metadata files
 db/init.sh            → Database schema + roles (pgvector, first container start)
+db/migrations/        → Hand-applied SQL for the existing production database
 Dockerfile            → Standalone production image
 ```
 
@@ -20,7 +24,8 @@ Dockerfile            → Standalone production image
 
 - **Embeddings:** Google `gemini-embedding-001` with `outputDimensionality` 768 (`@ai-sdk/google` in the route, `google-genai` in ingestion; keep both in sync)
 - **LLM:** Claude via `@ai-sdk/anthropic`, model from `CHAT_MODEL` (default `claude-opus-5-5`), effort `low`, `fallbacks: "default"`
-- **Vector search:** Postgres `match_documents` via `pg` (read-only `chat_ro` role) with cosine similarity, threshold 0.1, top 5 results
+- **Vector search:** Postgres `match_documents(embedding, threshold, count, filter_source)` via `pg` (read-only `chat_ro` role) with cosine similarity, threshold 0.1, top 5 results. Always call the four-argument form.
+- **Document focus:** `?doc=<slug>` (slug = `metadata.source` minus extension). Focused: 6 chunks from that source + 3 general; unknown slug → 400. Spec: `docs/superpowers/specs/2026-10-26-document-focus-design.md`
 - **Chunking:** 1000 chars with 100 char overlap (done in Python ingestion)
 - **Streaming:** AI SDK `streamText` → `toUIMessageStream` → `createUIMessageStreamResponse`
 
@@ -30,6 +35,7 @@ Dockerfile            → Standalone production image
 npm run dev       # Start dev server
 npm run build     # Production build
 npm run lint      # ESLint
+npm test          # Vitest (app/lib/*.test.ts)
 ```
 
 ## Environment Variables

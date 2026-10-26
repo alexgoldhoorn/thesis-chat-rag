@@ -44,6 +44,14 @@ Use the `pgvector/pgvector:pg17` image and mount `db/init.sh` into `/docker-entr
 - `chat_ro`: used by the app; can only read `documents` and call `match_documents`
 - `ingest`: used by `scripts/ingest.py`; can write `documents`
 
+`init.sh` runs only on an empty data directory, so schema changes for an existing database ship as numbered files in `db/migrations/` (idempotent, applied by hand as the `postgres` superuser, in order, following the deploy notes at the top of each file):
+
+```bash
+docker exec -i thesis-chat-db psql -U postgres -d thesis < db/migrations/0001-match-documents-source-filter.sql
+```
+
+`init.sh` always holds the current schema, so a fresh install needs no migrations.
+
 ### Data Ingestion
 
 ```bash
@@ -61,6 +69,7 @@ When the embedding model changes, re-ingest everything with `--truncate`: vector
 ```bash
 npm install
 npm run dev
+npm test          # unit tests (Vitest)
 ```
 
 ### Deploy
@@ -68,6 +77,12 @@ npm run dev
 The `Dockerfile` builds a Next.js standalone image. Runtime config (`DATABASE_URL`, API keys) comes from the environment; nothing secret is baked into the image.
 
 The public route caps each request (question length, history length, answer length) and the whole day (`DAILY_ANSWER_LIMIT`).
+
+## Document focus links
+
+`https://chat.goldhoorn.net/?doc=<slug>` opens the chat focused on one document; `&q=<question>` prefills the input (it is never sent automatically). The slug is the ingested filename without its extension; `GET /api/docs` lists every slug with its title, year, type and URL.
+
+In focus mode retrieval takes up to 6 chunks from that document plus up to 3 from the rest of the corpus, and the prompt tells the model which document the visitor is reading. An unknown slug is a 400 from the API and a visible notice on the page, never a silent fallback.
 
 ## How It Works
 

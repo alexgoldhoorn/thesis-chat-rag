@@ -1,4 +1,3 @@
-import { Pool } from "pg";
 import { anthropic, type AnthropicLanguageModelOptions } from "@ai-sdk/anthropic";
 import { google, type GoogleEmbeddingModelOptions } from "@ai-sdk/google";
 import {
@@ -9,13 +8,14 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from "ai";
-
-// Read-only role: it can only SELECT documents and call match_documents (db/init.sh).
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 3,
-  statement_timeout: 10_000,
-});
+import { pool } from "@/app/lib/db";
+import { getDocs, type IngestedDoc } from "@/app/lib/docs";
+import {
+  docUrl,
+  focusParagraph,
+  mergeFocused,
+  SLUG_PATTERN,
+} from "@/app/lib/focus";
 
 // Must match the model and dimension used in scripts/ingest.py and db/init.sh.
 const EMBEDDING_MODEL = "gemini-embedding-001";
@@ -92,6 +92,7 @@ function sanitizeMessages(raw: unknown): UIMessage[] | null {
 }
 
 type MatchedDocument = {
+  id: string;
   content: string;
   metadata: Record<string, string | undefined> | null;
 };
@@ -110,6 +111,27 @@ export async function POST(req: Request) {
       return badRequest(
         `Please keep questions under ${MAX_QUESTION_CHARS} characters.`
       );
+    }
+
+    // Document focus (?doc=): validated before any embedding or daily slot, and
+    // only a slug found in the document list ever reaches SQL (as its source).
+    let focus: IngestedDoc | null = null;
+    if (body.doc !== undefined && body.doc !== null) {
+      if (typeof body.doc !== "string" || !SLUG_PATTERN.test(body.doc)) {
+        return badRequest("Invalid document.");
+      }
+      let docs: IngestedDoc[];
+      try {
+        docs = await getDocs();
+      } catch (error: unknown) {
+        console.error("Docs Error:", error);
+        return new Response(
+          JSON.stringify({ error: "The chat is temporarily unavailable." }),
+          { status: 503 }
+        );
+      }
+      focus = docs.find((d) => d.slug === body.doc) ?? null;
+      if (!focus) return badRequest("Unknown document.");
     }
 
     if (!takeDailySlot()) {
@@ -134,11 +156,34 @@ export async function POST(req: Request) {
       },
     });
 
-    // 2. Vector search
-    const { rows: documents } = await pool.query<MatchedDocument>(
-      "select content, metadata from match_documents($1::vector, $2, $3)",
-      [JSON.stringify(embedding), 0.1, 5]
-    );
+    // 2. Vector search. Always the four-argument form: while the old
+    // three-argument overload exists, a three-argument call is ambiguous.
+    const vector = JSON.stringify(embedding);
+    const search = (count: number, source: string | null) =>
+      pool
+        .query<MatchedDocument>(
+          "select id, content, metadata from match_documents($1::vector, $2, $3, $4)",
+          [vector, 0.1, count, source]
+        )
+        .then((result) => result.rows);
+
+    let documents: MatchedDocument[];
+    let focusNote = "";
+    if (focus) {
+      // Soft focus: prefer the open document, but keep the rest of the corpus
+      // in view so cross-document questions still work.
+      const [focused, general] = await Promise.all([
+        search(6, focus.source),
+        search(3, null),
+      ]);
+      documents = mergeFocused(focused, general, focus.source);
+      focusNote = focusParagraph(focus, focused.length > 0) + "\n\n";
+      console.log(
+        `Focus ${focus.slug}: ${focused.length} focused + ${documents.length - focused.length} general rows`
+      );
+    } else {
+      documents = await search(5, null);
+    }
 
     // 3. Construct "Smart Context" with Metadata
     const context = documents
@@ -151,9 +196,7 @@ export async function POST(req: Request) {
         const type = meta.type || "Document";
 
         // B. Use URL from BibTeX if available, otherwise link to the website
-        const url =
-          meta.url ||
-          `https://alex.goldhoorn.net/publications/dl/${meta.source}`;
+        const url = docUrl(meta);
 
         // C. Create a header block for the AI to read
         // We format it clearly so the AI knows this block belongs to this source.
@@ -171,7 +214,7 @@ ${doc.content}
     // 4. System Prompt with Citation Rules
     const systemPrompt = `You answer questions about Alex Goldhoorn's PhD thesis, academic papers, student reports and articles, using only the sources below.
 
-<context>
+${focusNote}<context>
 ${context || "(no matching sources)"}
 </context>
 

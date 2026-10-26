@@ -1,6 +1,6 @@
 # Document focus: "Ask about this paper" links into the research chat
 
-Date: 2026-10-26. Status: design, not built.
+Date: 2026-10-26. Status: built 2026-10-26 (branch `feat/document-focus`), not deployed.
 
 ## Intent
 

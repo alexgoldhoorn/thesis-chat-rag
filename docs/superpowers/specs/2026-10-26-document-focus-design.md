@@ -1,6 +1,6 @@
 # Document focus: "Ask about this paper" links into the research chat
 
-Date: 2026-10-26. Status: built 2026-10-26 (branch `feat/document-focus`), not deployed.
+Date: 2026-10-26. Status: built and deployed 2026-10-26 (migrations 0001 + 0002 applied). Site links (part 5) pending.
 
 ## Intent
 
